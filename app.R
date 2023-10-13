@@ -13,6 +13,10 @@ procBatch <- partial(processBatchalign,
                      noWor=FALSE, formatText=FALSE, mergeMax=Inf, 
                      eafUtils="github")
 
+##Python libraries
+elan_data <- import("elan_data")
+pathlib <- import("pathlib")
+
 # Parameters ------------------------------------------------------------------
 
 ##Automatically use given files to expedite testing; set to NULL to force drag-n-drop
@@ -23,7 +27,7 @@ testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2, 4)]
 
 ##Debugging
 ##Show additional UI element(s) at top of main panel for debugging?
-showDebug <- TRUE
+showDebug <- FALSE
 
 
 # UI ----------------------------------------------------------------------
@@ -162,7 +166,9 @@ server <- function(input, output, session) {
   ##  environment, to 'peek into' environment)
   output$debugContent <- renderPrint({
     list(
-      `outFiles()` = outFiles()
+      `names(outFiles())` = names(outFiles()),
+      `names(outFiles()[[1]])` = names(outFiles()[[1]]),
+      `formals(outFiles()[[1]]$save_ELAN)` = formals(outFiles()[[1]]$save_ELAN)
 		)
   })
   
@@ -217,16 +223,20 @@ server <- function(input, output, session) {
   
   ##Get output files
   outFiles <- reactive({
-    req(input$genOutput)
     ##Translate options to fillWords() args
     overlaps <- if_else(input$overlaps=="On both turns", "duplicate", "separate")
     containment <- if_else(input$overlaps=="Totally contained in turn", "total", "partial")
-    noMatch <- case_when(
-      all(c("Batchalign turn", "Batchalign word") %in% input$noMatch) ~ "both",
-      input$noMatch=="Batchalign turn" ~ "turn",
-      input$noMatch=="Batchalign word" ~ "word",
-      .default="none"
-    )
+    if ("Batchalign turn" %in% input$noMatch) {
+      if ("Batchalign word" %in% input$noMatch) {
+        noMatch <- "both"
+      } else {
+        noMatch <- "turn"
+      }
+    } else if ("Batchalign word" %in% input$noMatch) {
+      noMatch <- "word"
+    } else {
+      noMatch <- "none"
+    }
     
     ##Only use files that match for both
     matchFiles <- 
@@ -251,12 +261,11 @@ server <- function(input, output, session) {
     ##Fill words
     out <- 
       fillWords(segDF, wordDF, 
-              overlaps=overlaps, containment=containment, noMatch=noMatch) %>% 
+                overlaps=overlaps, containment=containment, noMatch=noMatch) %>% 
       mutate(across(Text, betterText)) ##betterText(): from process-batchalign.R
     
     ##Convert output to Elan using https://github.com/AlejandroCiuba/elan_data
-    elan_data <- import("elan_data")
-    pathlib <- import("pathlib")
+    
     
     ##Get a list of ELAN_Data objects
     elanList <-
@@ -276,10 +285,9 @@ server <- function(input, output, session) {
       walk(~ .x$add_tiers(c("Comment","Noise","Redaction"))) # %>% 
       # walk(~ .x$remove_tiers("default")) %>%  ##doesn't seem to work
       # walk(\(eaf) walk(eaf$tier_names, \(tier) eaf$add_participant(tier, tier))) ##errors out
-    
-    ##Convert to XML so I can handle the download natively? (and then remove default tier?)
-    ##No, just use the save_ELAN method within the download handler
-  })
+  }) %>% 
+    ##Only run when "Generate output" is clicked
+    bindEvent(input$genOutput)
 	
   ##Main panel
 	output$output <- renderUI({
@@ -301,10 +309,10 @@ server <- function(input, output, session) {
 	  },
 	  content=function(file) {
 	    if (length(outFiles())==1) {
-	      write_xml(outFiles()[[1]], file) ##save_ELAN???
+	      outFiles()[[1]]$save_ELAN(rename=pathlib$Path(file))
 	    } else {
 	      outFiles() %>% 
-	        iwalk(write_xml) ##save_ELAN???
+	        walk(~ .x$save_ELAN())
 	      zip(file, names(outFiles()))
 	    }
 	  }
