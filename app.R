@@ -14,16 +14,16 @@ procBatch <- partial(processBatchalign,
                      eafUtils="github")
 
 ##Python libraries
-elan_data <- import("elan_data")
 pathlib <- import("pathlib")
+elan_data <- import("elan_data")
 
 # Parameters ------------------------------------------------------------------
 
 ##Automatically use given files to expedite testing; set to NULL to force drag-n-drop
-# testFileAISeg <- NULL
-# testFileBA <- NULL
-testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[c(2, 3)]
-testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2, 4)]
+testFileAISeg <- NULL
+testFileBA <- NULL
+# testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[c(2, 3)]
+# testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2, 4)]
 
 ##Debugging
 ##Show additional UI element(s) at top of main panel for debugging?
@@ -259,13 +259,87 @@ server <- function(input, output, session) {
       splitWords() ##From process-batchalign.R
     
     ##Fill words
-    out <- 
+    filled <- 
       fillWords(segDF, wordDF, 
                 overlaps=overlaps, containment=containment, noMatch=noMatch) %>% 
       mutate(across(Text, betterText)) ##betterText(): from process-batchalign.R
     
-    ##Convert output to Elan using https://github.com/AlejandroCiuba/elan_data
+    ##Convert output to Elan using built-in methods
+    timeSlots <-
+      filled %>%
+      select(File, Start, End) %>% 
+      pivot_longer(-File, names_to=NULL, values_to="TIME_SLOT_VALUE") %>% 
+      distinct() %>% 
+      mutate(TIME_SLOT_ID = paste0("ts", seq_len(n())),
+             ##TODO: Double-check that this .by scopes over n(), too
+             .by=File, .before=TIME_SLOT_VALUE)
+    out <-
+      filled %>% 
+      mutate(ANNOTATION_ID = paste0("a", seq_len(n())),
+             ##TODO: Double-check that this .by scopes over n(), too
+             .by=File) %>% 
+      left_join(timeSlots %>% 
+                  rename(Start = TIME_SLOT_VALUE, 
+                         TIME_SLOT_REF1 = TIME_SLOT_ID),
+                c("File", "Start")) %>% 
+      left_join(timeSlots %>% 
+                  rename(End = TIME_SLOT_VALUE, 
+                         TIME_SLOT_REF2 = TIME_SLOT_ID),
+                c("File", "End")) %>% 
+      rename(ANNOTATION_VALUE = Text) %>% 
+      select(-c(Start, End, Overlap)) %>% 
+      nest(ANNOTATION = -c(File, Tier))# %>% 
+      # rename(TIER_ID = Tier) %>% 
+      # mutate(PARTICIPANT = TIER_ID,
+      #        .after=TIER_ID) %>% 
+      # nest(TIER = -File)
+    ##Create XML nodes
     
+    ##TIME_ORDER nodes 
+    nodesTime <-
+      timeSlots %>% 
+      rowwise() %>% 
+      mutate(TIME_SLOT = list(structure(list(), 
+                                        TIME_SLOT_ID = TIME_SLOT_ID, 
+                                        TIME_SLOT_VALUE = TIME_SLOT_VALUE))) %>% 
+      ungroup() %>% 
+      nest(TIME_ORDER = -File) %>% 
+      mutate(TIME_ORDER = map(TIME_ORDER, 
+                              ~ .x$TIME_SLOT %>% 
+                                set_names(rep("TIME_SLOT", length(.))) %>% 
+                                list(TIME_ORDER = .) %>% 
+                                as_xml_document()))
+    
+    ##TIER nodes
+    out %>% 
+      ##Create lists of annotation nodes
+      mutate(TIER = map(ANNOTATION,
+                        ~ .x %>% 
+                          rowwise() %>% 
+                          mutate(ANNOTATION = list(
+                            ANNOTATION = list(
+                              ALIGNABLE_ANNOTATION = structure(list(
+                                ANNOTATION_VALUE = list(ANNOTATION_VALUE)),
+                                ANNOTATION_ID = ANNOTATION_ID, 
+                                TIME_SLOT_REF1 = TIME_SLOT_REF1,
+                                TIME_SLOT_REF2 = TIME_SLOT_REF2)))) %>% 
+               pull(ANNOTATION))) %>%
+      ##Add tier-level attributes to lists of annotation nodes
+      mutate(TIER = map2(TIER, Tier,
+                         ~ set_attributes(.x, list(LINGUISTIC_TYPE_REF="default-lt",
+                                                   TIER_ID = .y,
+                                                   PARTICIPANT = .y)) %>% 
+                           ##Restore node names zapped by set_attributes()
+                           set_names(rep("ANNOTATION", length(.x))))) %>%
+      ##Extract from dataframe and add node name
+      pull(TIER) %>% 
+      set_names(rep("TIER", length(.)))# %>% 
+      # str(2, list.len=6)
+      # list(TIERS = .) %>% 
+      # as_xml_document() %>% 
+      # write_xml("tmp")
+    
+    ##Convert output to Elan using https://github.com/AlejandroCiuba/elan_data
     
     ##Get a list of ELAN_Data objects
     elanList <-
