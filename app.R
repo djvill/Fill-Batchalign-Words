@@ -59,7 +59,8 @@ ui <- fluidPage(
               uiOutput("outputButton"),
 							uiOutput("output"))
   ),
-  p("App code on ", a("GitHub", href="https://github.com/djvill/Fill-Batchalign-Words"), class="footer")
+  p("App code on ", a("GitHub", href="https://github.com/djvill/Fill-Batchalign-Words", target="_blank"), 
+    class="footer")
 )
 
 
@@ -215,7 +216,10 @@ server <- function(input, output, session) {
     
     tagList(
       tableOutput("fileInfo"),
-      actionButton("genOutput", "Generate output")
+      div(actionButton("genOutput", "Generate output"),
+          p("(Please be patient—it's slow)",
+            style="margin: 0px 5px;"),
+          style="display: flex;align-items: center;")
     )
   })
   
