@@ -31,9 +31,6 @@ showDebug <- FALSE
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(
-  # tags$head(
-    # tags$link(rel = "stylesheet", type = "text/css", href = "lvc-plotter.css")
-  # ),
   titlePanel("Fill Batchalign Words"),
   h4("Dan Villarreal (University of Pittsburgh)"), 
   sidebarLayout(
@@ -55,12 +52,11 @@ ui <- fluidPage(
                 multiple=TRUE),
       
       ##Configuration settings
-      uiOutput("options"),
-      uiOutput("outputButton")
+      uiOutput("options")
     ),
     
     mainPanel(uiOutput("debug"),
-              tableOutput("fileInfo"),
+              uiOutput("outputButton"),
 							uiOutput("output"))
   ),
   p("App code on ", a("GitHub", href="https://github.com/djvill/Fill-Batchalign-Words"), class="footer")
@@ -189,13 +185,6 @@ server <- function(input, output, session) {
     )
   })
   
-  ##"Generate output" button
-  output$outputButton <- renderUI({
-    ##Only show once both files have been uploaded
-    req(AISeg(), BA())
-    
-    actionButton("genOutput", "Generate output")
-  })
   
   ##Match input files
   inFiles <- reactive({
@@ -217,6 +206,17 @@ server <- function(input, output, session) {
                                nrow() %>%
                                paste("turns"),
                              "(No file uploaded)")))
+  })
+  
+  ##File info table & "Generate output" button
+  output$outputButton <- renderUI({
+    ##Only show once both files have been uploaded
+    req(inFiles())
+    
+    tagList(
+      tableOutput("fileInfo"),
+      actionButton("genOutput", "Generate output")
+    )
   })
   
   ##Get output files
@@ -288,8 +288,11 @@ server <- function(input, output, session) {
 	output$output <- renderUI({
 	  req(outFiles())
 	  
-	  ##File info 
-		downloadButton("OutputFile", "Download merged file(s)")
+	  ##Download button
+	  tagList(
+	    hr(),
+	    downloadButton("OutputFile", "Download merged file(s)")
+	  )
 	})
 	
 	##Download handler
