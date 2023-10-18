@@ -5,7 +5,6 @@ library(dplyr)
 library(purrr)
 library(magrittr)
 library(xml2)
-library(reticulate)
 
 ##Batchalign-processing function
 source("process-batchalign.R")
@@ -13,9 +12,8 @@ procBatch <- partial(processBatchalign,
                      noWor=FALSE, formatText=FALSE, mergeMax=Inf, 
                      eafUtils="github")
 
-##Python libraries
-pathlib <- import("pathlib")
-elan_data <- import("elan_data")
+##ELAN utilities
+source("elan-utils.R")
 
 # Parameters ------------------------------------------------------------------
 
@@ -23,7 +21,7 @@ elan_data <- import("elan_data")
 testFileAISeg <- NULL
 testFileBA <- NULL
 # testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[c(2, 3)]
-# testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2, 4)]
+# testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2:4)]
 
 ##Debugging
 ##Show additional UI element(s) at top of main panel for debugging?
@@ -262,103 +260,26 @@ server <- function(input, output, session) {
     filled <- 
       fillWords(segDF, wordDF, 
                 overlaps=overlaps, containment=containment, noMatch=noMatch) %>% 
-      mutate(across(Text, betterText)) ##betterText(): from process-batchalign.R
+      mutate(across(Text, betterText)) %>% ##betterText(): from process-batchalign.R
+      select(-Overlap)
     
     ##Convert output to Elan using built-in methods
-    timeSlots <-
-      filled %>%
-      select(File, Start, End) %>% 
-      pivot_longer(-File, names_to=NULL, values_to="TIME_SLOT_VALUE") %>% 
-      distinct() %>% 
-      mutate(TIME_SLOT_ID = paste0("ts", seq_len(n())),
-             ##TODO: Double-check that this .by scopes over n(), too
-             .by=File, .before=TIME_SLOT_VALUE)
-    out <-
+    eaflist <- 
       filled %>% 
-      mutate(ANNOTATION_ID = paste0("a", seq_len(n())),
-             ##TODO: Double-check that this .by scopes over n(), too
-             .by=File) %>% 
-      left_join(timeSlots %>% 
-                  rename(Start = TIME_SLOT_VALUE, 
-                         TIME_SLOT_REF1 = TIME_SLOT_ID),
-                c("File", "Start")) %>% 
-      left_join(timeSlots %>% 
-                  rename(End = TIME_SLOT_VALUE, 
-                         TIME_SLOT_REF2 = TIME_SLOT_ID),
-                c("File", "End")) %>% 
-      rename(ANNOTATION_VALUE = Text) %>% 
-      select(-c(Start, End, Overlap)) %>% 
-      nest(ANNOTATION = -c(File, Tier))# %>% 
-      # rename(TIER_ID = Tier) %>% 
-      # mutate(PARTICIPANT = TIER_ID,
-      #        .after=TIER_ID) %>% 
-      # nest(TIER = -File)
-    ##Create XML nodes
-    
-    ##TIME_ORDER nodes 
-    nodesTime <-
-      timeSlots %>% 
-      rowwise() %>% 
-      mutate(TIME_SLOT = list(structure(list(), 
-                                        TIME_SLOT_ID = TIME_SLOT_ID, 
-                                        TIME_SLOT_VALUE = TIME_SLOT_VALUE))) %>% 
-      ungroup() %>% 
-      nest(TIME_ORDER = -File) %>% 
-      mutate(TIME_ORDER = map(TIME_ORDER, 
-                              ~ .x$TIME_SLOT %>% 
-                                set_names(rep("TIME_SLOT", length(.))) %>% 
-                                list(TIME_ORDER = .) %>% 
-                                as_xml_document()))
-    
-    ##TIER nodes
-    out %>% 
-      ##Create lists of annotation nodes
-      mutate(TIER = map(ANNOTATION,
-                        ~ .x %>% 
-                          rowwise() %>% 
-                          mutate(ANNOTATION = list(
-                            ANNOTATION = list(
-                              ALIGNABLE_ANNOTATION = structure(list(
-                                ANNOTATION_VALUE = list(ANNOTATION_VALUE)),
-                                ANNOTATION_ID = ANNOTATION_ID, 
-                                TIME_SLOT_REF1 = TIME_SLOT_REF1,
-                                TIME_SLOT_REF2 = TIME_SLOT_REF2)))) %>% 
-               pull(ANNOTATION))) %>%
-      ##Add tier-level attributes to lists of annotation nodes
-      mutate(TIER = map2(TIER, Tier,
-                         ~ set_attributes(.x, list(LINGUISTIC_TYPE_REF="default-lt",
-                                                   TIER_ID = .y,
-                                                   PARTICIPANT = .y)) %>% 
-                           ##Restore node names zapped by set_attributes()
-                           set_names(rep("ANNOTATION", length(.x))))) %>%
-      ##Extract from dataframe and add node name
-      pull(TIER) %>% 
-      set_names(rep("TIER", length(.)))# %>% 
-      # str(2, list.len=6)
-      # list(TIERS = .) %>% 
-      # as_xml_document() %>% 
-      # write_xml("tmp")
-    
-    ##Convert output to Elan using https://github.com/AlejandroCiuba/elan_data
-    
-    ##Get a list of ELAN_Data objects
-    elanList <-
-      out %>% 
-      mutate(across(c(Start, End), as.integer)) %>% 
-      select(File, TIER_ID = Tier, START = Start, STOP = End, TEXT = Text) %>%
+      rename(TierID = Tier) %>% 
       nest(df = -File) %>% 
-      mutate(file = list(pathlib$Path(File)),
-             audio = list(pathlib$Path(str_replace(File, "eaf$", "wav"))),
-             init_df=TRUE) %>% 
-      select(-File) %>% 
-      pmap(elan_data$ELAN_Data$from_dataframe) %>% 
-      set_names(unique(out$File))
+      pull(df, File) %>% 
+      imap(~ df_to_elan(.x, mediaFile=gsub("eaf$", "wav", .y)))
     
-    ##Modify list (modifies in-place because Python)
-    elanList %>% 
-      walk(~ .x$add_tiers(c("Comment","Noise","Redaction"))) # %>% 
-      # walk(~ .x$remove_tiers("default")) %>%  ##doesn't seem to work
-      # walk(\(eaf) walk(eaf$tier_names, \(tier) eaf$add_participant(tier, tier))) ##errors out
+    ##Add additional tiers
+    walk(eaflist, 
+         ~ .x %>% 
+           add_tier("Noise", "Noise") %>% 
+           add_tier("Comment", "Comment") %>% 
+           add_tier("Redaction", "Redaction"))
+    
+    ##Return eaflist
+    eaflist
   }) %>% 
     ##Only run when "Generate output" is clicked
     bindEvent(input$genOutput)
@@ -371,7 +292,6 @@ server <- function(input, output, session) {
 		downloadButton("OutputFile", "Download merged file(s)")
 	})
 	
-	
 	##Download handler
 	output$OutputFile <- downloadHandler(
 	  filename=function() {
@@ -383,10 +303,10 @@ server <- function(input, output, session) {
 	  },
 	  content=function(file) {
 	    if (length(outFiles())==1) {
-	      outFiles()[[1]]$save_ELAN(rename=pathlib$Path(file))
+	      write_xml(outFiles()[[1]], file)
 	    } else {
 	      outFiles() %>% 
-	        walk(~ .x$save_ELAN())
+	        iwalk(write_xml)
 	      zip(file, names(outFiles()))
 	    }
 	  }

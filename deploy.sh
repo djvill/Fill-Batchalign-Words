@@ -18,4 +18,4 @@ then
 fi
 
 ##Deploy app to shinyapps.io
-Rscript -e "rsconnect::deployApp(appFiles=c('app.R', 'process-batchalign.R', '.Rprofile'), launch.browser=FALSE)"
+Rscript -e "rsconnect::deployApp(appFiles=c('app.R', 'process-batchalign.R', 'elan-utils.R'), launch.browser=FALSE)"
