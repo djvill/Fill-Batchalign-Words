@@ -47,7 +47,7 @@ df_to_elan <- function(df, mediaFile=NULL) {
                 rename(End = TIME_VALUE, 
                        TIME_SLOT_REF2 = TIME_SLOT_ID),
               "End") %>% 
-    rename(ANNOTATION_VALUE = Text) %>% 
+    mutate(ANNOTATION_VALUE = replace_na(Text, "")) %>% 
     select(TierID, ANNOTATION_VALUE, ANNOTATION_ID, 
            TIME_SLOT_REF1, TIME_SLOT_REF2) %>% 
     nest(ANNOTATION = -TierID)
