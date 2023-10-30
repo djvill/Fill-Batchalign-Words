@@ -270,7 +270,6 @@ server <- function(input, output, session) {
     ##Convert output to Elan using built-in methods
     eaflist <- 
       filled %>% 
-      rename(TierID = Tier) %>% 
       nest(df = -File) %>% 
       pull(df, File) %>% 
       imap(~ df_to_elan(.x, mediaFile=gsub("eaf$", "wav", .y)))

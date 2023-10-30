@@ -2,17 +2,26 @@
 df_to_elan <- function(df, mediaFile=NULL) {
   ##Check arg
   if (!is.data.frame(df)) stop("df must be a data.frame")
-  reqCols <- c("TierID", "Text", "Start", "End")
+  reqCols <- c("Tier", "Text", "Start", "End")
   missingCols <- setdiff(reqCols, colnames(df))
   if (length(missingCols) > 0) stop("Missing required columns: ", 
                                     paste(missingCols, collapse=" "))
-  if ("File" %in% colnames(df)) stop("df must contain *one file's* worth of annotations")
+  if ("File" %in% colnames(df) && length(unique(df$File)) > 1)
+    stop("df must contain *one file's* worth of annotations")
   
   ##Packages
   library(dplyr)
   library(tidyr)
   library(purrr)
+  library(magrittr)
   library(xml2)
+  
+  ##Reshape df
+  df <- df %>% 
+    ##Remove old ANNOTATION_ID and TIME_SLOT_REF columns, if they exist
+    select(-any_of(c("ANNOTATION_ID", "TIME_SLOT_REF1", "TIME_SLOT_REF2"))) %>% 
+    ##Use TierID r/t Tier
+    rename(TierID = Tier)
   
   ##Get time slots
   timeSlots <- 
