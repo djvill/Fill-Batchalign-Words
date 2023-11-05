@@ -21,7 +21,9 @@ df_to_elan <- function(df, mediaFile=NULL) {
     ##Remove old ANNOTATION_ID and TIME_SLOT_REF columns, if they exist
     select(-any_of(c("ANNOTATION_ID", "TIME_SLOT_REF1", "TIME_SLOT_REF2"))) %>% 
     ##Use TierID r/t Tier
-    rename(TierID = Tier)
+    rename(TierID = Tier) %>% 
+    ##Ensure integer TIME_VALUEs
+    mutate(across(c(Start, End), round))
   
   ##Get time slots
   timeSlots <- 
