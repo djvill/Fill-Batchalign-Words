@@ -45,7 +45,7 @@ ui <- fluidPage(
 			
 			##File upload (drag-n-drop) box
       fileInput("fileBA",
-                label="Drag and drop the Batchalign file(s) into the box below",
+                label="Drag and drop the Batchalign-transcribed file(s) into the box below",
                 buttonLabel="Browse...",
                 placeholder="Your file here",
                 accept=".eaf",
@@ -198,7 +198,8 @@ server <- function(input, output, session) {
   ##File info
   output$fileInfo <- renderTable({
     req(inFiles())
-    inFiles() %>%
+    fileTable <-
+      inFiles() %>%
       rowwise() %>%
       mutate(across(-File,
                     ~ ifelse(!is.null(.x),
@@ -207,6 +208,14 @@ server <- function(input, output, session) {
                                nrow() %>%
                                paste("turns"),
                              "(No file uploaded)")))
+    fileMessage <- 
+      fileTable %>% 
+      mutate(across(-File, ~ str_remove_all(.x, " turns|\\(|\\)"))) %>% 
+      str_glue_data("{File} ({`AI-Segmented`}, {Batchalign})")
+    message(paste(c("File(s) uploaded (AI-segmented turns, Batchalign turns):",
+                    fileMessage), 
+                  collapse="\n  "))
+    fileTable
   })
   
   ##File info table & "Generate output" button

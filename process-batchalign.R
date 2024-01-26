@@ -267,7 +267,7 @@ wordAlignments <- function(eaf, ...) {
 fillWords <- function(segDF, wordDF, 
                       overlaps=c("duplicate","separate"),
                       containment=c("total","partial"),
-                      noMatch=c("turn","word","both")) {
+                      noMatch=c("turn","word","both","none")) {
   ##Check args
   stopifnot(is.data.frame(segDF))
   stopifnot(all(c("File", "Tier", "Start", "End") %in% colnames(segDF)))
