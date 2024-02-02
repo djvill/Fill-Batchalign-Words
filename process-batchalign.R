@@ -177,8 +177,8 @@ betterText <- function(x) {
     str_replace_all("mhm", "mmm hmm") %>%
     str_replace_all("uhhuh", "uh huh") %>% 
     str_replace_all("lemme", "let me") %>% 
-    str_replace_all("(be)cause", "'cause") %>% 
-    str_replace_all("(un)til", "'til")
+    str_replace_all("\\(be\\)cause", "'cause") %>% 
+    str_replace_all("\\(un\\)til", "'til")
   
   ##Unwind CHAT format conversions by removing elements:
   x <- x %>% 
