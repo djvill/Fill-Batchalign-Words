@@ -28,37 +28,30 @@ df_to_elan <- function(df, mediaFile=NULL) {
   
   ##Get time slots
   timeSlots <- 
-    df %>%
-    select(Start, End) %>% 
-    pivot_longer(everything(), names_to=NULL, values_to="TIME_VALUE") %>% 
-    distinct() %>% 
-    arrange(TIME_VALUE) %>% 
+    df %>% 
+    mutate(ANNOTATION_ID = paste0("a", seq_len(n()))) %>% 
+    pivot_longer(c(Start, End), names_to="Boundary", values_to="TIME_VALUE") %>% 
     mutate(TIME_SLOT_ID = paste0("ts", seq_len(n())),
            .before=TIME_VALUE)
   
   ##Create TIME_ORDER node
   TIME_ORDER <-
     timeSlots %>% 
-    rowwise() %>% 
-    mutate(TIME_SLOT = list(TIME_SLOT = structure(list(), 
-                                                  TIME_SLOT_ID = TIME_SLOT_ID, 
-                                                  TIME_VALUE = TIME_VALUE))) %>% 
-    pull(TIME_SLOT) %>%
+    with(map2(TIME_SLOT_ID, TIME_VALUE, 
+              ##TIME_SLOT nodes have attributes r/t elements or values
+              ~ set_attributes(list(),
+                               list(TIME_SLOT_ID = .x, 
+                                    TIME_VALUE = .y)))) %>% 
+    set_names(rep("TIME_SLOT", nrow(timeSlots))) %>% 
     list(TIME_ORDER = .) %>%
     as_xml_document()
   
-  ##Add timeslots to annotation dataframes
+  ##Add timeslots to annotation dataframe
   tierDF <-
-    df %>%
-    mutate(ANNOTATION_ID = paste0("a", seq_len(n()))) %>% 
-    left_join(timeSlots %>% 
-                rename(Start = TIME_VALUE, 
-                       TIME_SLOT_REF1 = TIME_SLOT_ID),
-              "Start") %>% 
-    left_join(timeSlots %>% 
-                rename(End = TIME_VALUE, 
-                       TIME_SLOT_REF2 = TIME_SLOT_ID),
-              "End") %>% 
+    timeSlots %>% 
+    mutate(Boundary = paste0("TIME_SLOT_REF", if_else(Boundary=="Start", "1", "2"))) %>% 
+    select(-TIME_VALUE) %>% 
+    pivot_wider(names_from=Boundary, values_from=TIME_SLOT_ID) %>% 
     mutate(ANNOTATION_VALUE = replace_na(Text, "")) %>% 
     select(TierID, ANNOTATION_VALUE, ANNOTATION_ID, 
            TIME_SLOT_REF1, TIME_SLOT_REF2) %>% 
