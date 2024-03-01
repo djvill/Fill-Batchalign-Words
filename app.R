@@ -35,21 +35,15 @@ ui <- fluidPage(
   h4("Dan Villarreal (University of Pittsburgh)"), 
   sidebarLayout(
     sidebarPanel(
-      ##File upload (drag-n-drop) box
-      fileInput("fileAISeg",
-                label="Drag and drop the AI-segmented file(s) into the box below",
-                buttonLabel="Browse...",
-                placeholder="Your file here",
-                accept=".eaf",
-                multiple=TRUE),
-			
-			##File upload (drag-n-drop) box
-      fileInput("fileBA",
-                label="Drag and drop the Batchalign-transcribed file(s) into the box below",
-                buttonLabel="Browse...",
-                placeholder="Your file here",
-                accept=".eaf",
-                multiple=TRUE),
+      ##Functionality selection
+      selectInput("task",
+                  "Choose a task",
+                  list("Fill Batchalign transcription into AI segmentation" = "fill",
+                       "Format Batchalign transcription" = "format"),
+                  "fill"),
+      
+      ##File upload (drag-n-drop) box(es)
+      uiOutput("upload"),
       
       ##Configuration settings
       uiOutput("options")
@@ -131,10 +125,17 @@ server <- function(input, output, session) {
       if (!all(endsWith(filePaths, ".eaf"))) {
         stop("AI-segmented file must be an .eaf file")
       }
-      filePaths %>% 
-        imap_dfr(~ procBatch(.x) %>% 
-                   ##Override temp path (datapath) with actual name (name)
-                   mutate(File = .y))
+      if (input$task=="fill") {
+        filePaths %>% 
+          imap_dfr(~ procBatch(.x) %>% 
+                     ##Override temp path (datapath) with actual name (name)
+                     mutate(File = .y))
+      } else {
+        filePaths %>% 
+          imap_dfr(~ processBatchalign(.x) %>% 
+                     ##Override temp path (datapath) with actual name (name)
+                     mutate(File = .y))
+      }
     })
   } else if (all(file.exists(testFileBA))) {
     ##If test file exists, use it
@@ -161,10 +162,30 @@ server <- function(input, output, session) {
   ##  environment, to 'peek into' environment)
   output$debugContent <- renderPrint({
     list(
-      `names(outFiles())` = names(outFiles()),
-      `names(outFiles()[[1]])` = names(outFiles()[[1]]),
-      `formals(outFiles()[[1]]$save_ELAN)` = formals(outFiles()[[1]]$save_ELAN)
+      `inFiles()` = inFiles(),
+      `formattedFiles()` = formattedFiles()
 		)
+  })
+  
+  ##File upload (drag-n-drop) box(es)
+  output$upload <- renderUI({
+    uploadAISeg <- fileInput("fileAISeg",
+                             label="Drag and drop the AI-segmented file(s) into the box below",
+                             buttonLabel="Browse...",
+                             placeholder="Your file here",
+                             accept=".eaf",
+                             multiple=TRUE)
+    uploadBA <- fileInput("fileBA",
+                          label="Drag and drop the Batchalign-transcribed file(s) into the box below",
+                          buttonLabel="Browse...",
+                          placeholder="Your file here",
+                          accept=".eaf",
+                          multiple=TRUE)
+    if (input$task=="fill") {
+      tagList(uploadAISeg, uploadBA)
+    } else {
+      tagList(uploadBA)
+    }
   })
   
   ##Config options
@@ -173,26 +194,33 @@ server <- function(input, output, session) {
     ##Only show once both files have been uploaded
     req(AISeg(), BA())
     
-    tagList(
-      ##Column selection (will create 3 selection inputs)
-      h3("Config options"),
-			radioButtons("overlaps", "Text for overlapping turns", 
-									 c("On both turns", "On a separate tier")),
-			radioButtons("containment", "How to determine when to fill a word",
-									 c("Totally contained in turn", "Partially contained in turn")),
-			checkboxGroupInput("noMatch", "Separate tier(s) to create for words that don't match any turns",
-												 c("Batchalign turn", "Batchalign word"), 
-												 c("Batchalign turn", "Batchalign word"))
-    )
+    if (input$task=="fill") {
+      tagList(
+        ##Column selection (will create 3 selection inputs)
+        h3("Config options"),
+        radioButtons("overlaps", "Text for overlapping turns", 
+                     c("On both turns", "On a separate tier")),
+        radioButtons("containment", "How to determine when to fill a word",
+                     c("Totally contained in turn", "Partially contained in turn")),
+        checkboxGroupInput("noMatch", "Separate tier(s) to create for words that don't match any turns",
+                           c("Batchalign turn", "Batchalign word"), 
+                           c("Batchalign turn", "Batchalign word"))
+      )
+    }
   })
   
   
   ##Match input files
   inFiles <- reactive({
-    req(AISeg(), BA())
-    full_join(nest(AISeg(), `AI-Segmented`=-File),
-              nest(BA(), Batchalign=-File),
-              "File")
+    if (input$task=="fill") {
+      req(AISeg(), BA())
+      full_join(nest(AISeg(), `AI-Segmented`=-File),
+                nest(BA(), Batchalign=-File),
+                "File")
+    } else {
+      req(BA())
+      nest(BA(), Batchalign=-File)
+    }
   })
   
   ##File info
@@ -208,28 +236,41 @@ server <- function(input, output, session) {
                                nrow() %>%
                                paste("turns"),
                              "(No file uploaded)")))
-    fileMessage <- 
-      fileTable %>% 
-      mutate(across(-File, ~ str_remove_all(.x, " turns|\\(|\\)"))) %>% 
-      str_glue_data("{File} ({`AI-Segmented`}, {Batchalign})")
-    message(paste(c("File(s) uploaded (AI-segmented turns, Batchalign turns):",
-                    fileMessage), 
-                  collapse="\n  "))
+    if (input$task=="fill") {
+      fileMessage <- 
+        fileTable %>% 
+        mutate(across(-File, ~ str_remove_all(.x, " turns|\\(|\\)"))) %>% 
+        str_glue_data("{File} ({`AI-Segmented`}, {Batchalign})")
+      message(paste(c("File(s) uploaded (AI-segmented turns, Batchalign turns):",
+                      fileMessage), 
+                    collapse="\n  "))
+    } else {
+      fileMessage <- 
+        fileTable %>% 
+        mutate(across(-File, ~ str_remove_all(.x, " turns|\\(|\\)"))) %>% 
+        str_glue_data("{File} ({Batchalign})")
+      message(paste(c("File(s) uploaded (Batchalign turns):",
+                      fileMessage), 
+                    collapse="\n  "))
+      fileTable <- fileTable %>% rename(Length = Batchalign)
+    }
     fileTable
   })
   
   ##File info table & "Generate output" button
   output$outputButton <- renderUI({
-    ##Only show once both files have been uploaded
-    req(inFiles())
-    
-    tagList(
-      tableOutput("fileInfo"),
-      div(actionButton("genOutput", "Generate output"),
-          p("(Please be patient—it's slow)",
-            style="margin: 0px 5px;"),
-          style="display: flex;align-items: center;")
-    )
+    if (input$task=="fill") {
+      ##Only show once both files have been uploaded
+      req(inFiles())
+      
+      tagList(
+        tableOutput("fileInfo"),
+        div(actionButton("genOutput", "Generate output"),
+            p("(Please be patient—it's slow)",
+              style="margin: 0px 5px;"),
+            style="display: flex;align-items: center;")
+      )
+    }
   })
   
   ##Get output files
@@ -295,34 +336,66 @@ server <- function(input, output, session) {
   }) %>% 
     ##Only run when "Generate output" is clicked
     bindEvent(input$genOutput)
+  
+  formattedFiles <- reactive({
+    inFiles() %>% 
+      pull(Batchalign, File) %>% 
+      imap(~ df_to_elan(.x, mediaFile=gsub("eaf$", "wav", .y)))
+  })
 	
   ##Main panel
 	output$output <- renderUI({
-	  req(outFiles())
-	  
-	  ##Download button
-	  tagList(
-	    hr(),
-	    downloadButton("OutputFile", "Download merged file(s)")
-	  )
+	  if (input$task=="fill") {
+	    req(outFiles())
+	    
+	    ##Download button
+	    tagList(
+	      hr(),
+	      downloadButton("OutputFile", "Download merged file(s)")
+	    )
+	  } else {
+	    req(inFiles())
+	    tagList(
+	      hr(),
+	      downloadButton("OutputFile", "Download formatted file(s)")
+	    )
+	  }
 	})
 	
 	##Download handler
 	output$OutputFile <- downloadHandler(
 	  filename=function() {
-	    if (length(outFiles())==1) {
-	      names(outFiles())
+	    if (input$task=="fill") { 
+	      if (length(outFiles())==1) {
+	        names(outFiles())
+	      } else {
+	        "merged_eafs.zip"
+	      }
 	    } else {
-	      "merged_eafs.zip"
+	      if (length(formattedFiles())==1) {
+	        names(formattedFiles())
+	      } else {
+	        "formatted_eafs.zip"
+	      }
 	    }
 	  },
 	  content=function(file) {
-	    if (length(outFiles())==1) {
-	      write_xml(outFiles()[[1]], file)
+	    if (input$task=="fill") {
+	      if (length(outFiles())==1) {
+	        write_xml(outFiles()[[1]], file)
+	      } else {
+	        outFiles() %>% 
+	          iwalk(write_xml)
+	        zip(file, names(outFiles()))
+	      }
 	    } else {
-	      outFiles() %>% 
-	        iwalk(write_xml)
-	      zip(file, names(outFiles()))
+	      if (length(formattedFiles())==1) {
+	        write_xml(formattedFiles()[[1]], file)
+	      } else {
+	        formattedFiles() %>% 
+	          iwalk(write_xml)
+	        zip(file, names(formattedFiles()))
+	      }
 	    }
 	  }
 	)
