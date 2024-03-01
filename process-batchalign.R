@@ -9,12 +9,12 @@ processBatchalign <- function(eaf, write=FALSE, outDir=".",
                               formatText=TRUE,
                               ##If final turn(s) are un-aligned, duration of 
                               ##  each un-aligned turn (added onto final 
-															##	aligned turn's end boundary)
+                              ##	aligned turn's end boundary)
                               endBuffer=1000,
-															##Merge turns on the same tier if they are
-															##	at most this far apart. (Set to Inf to
-															##	disable merging.)
-															mergeMax=150) {
+                              ##Merge turns on the same tier if they are
+                              ##	at most this far apart. (Set to Inf to
+                              ##	disable merging.)
+                              mergeMax=150) {
   ##Check args
   if (!file.exists(eaf)) {
     stop("File ", eaf, " does not exist.")
@@ -122,43 +122,46 @@ processBatchalign <- function(eaf, write=FALSE, outDir=".",
              End = if_else(prop==1 & Unaligned, Start+endBuffer, End)) %>% 
       select(-c(TmpStart, Unaligned, i, prop, Run, RevRun))
   }
-	
+  
   # ##Start & End: msec -> sec
   # df <- df %>% 
   #   mutate(across(c(Start, End), ~ .x / 1000))
   
-	##Optionally format text using betterText()
+  ##Optionally format text using betterText()
   if (formatText) {
     df <- df %>% 
       mutate(across(Text, betterText))
   }
-
-	##Optionally merge consecutive turns with small gaps
-	if (is.finite(mergeMax)) {
-		df <- df %>%
-			##Establish groups of turns that should be merged
-			group_by(Tier) %>%
-			mutate(PrevGap = coalesce(Start - lag(End), mergeMax+1),
-						 GapGroup = cumsum(PrevGap > mergeMax)) %>%
-			##Merge turns
-			group_by(Tier, GapGroup) %>%
-			summarise(across(Start, min), 
-								across(End, max),
-								across(Text, ~ paste(.x, collapse=" ")),
-								.groups="drop") %>%
-			##Back in Start order
-			arrange(Start) %>% 
-		  select(-GapGroup)
-	}
-	
+  
+  ##Optionally merge consecutive turns with small gaps
+  if (is.finite(mergeMax)) {
+    df <- df %>%
+      ##Establish groups of turns that should be merged
+      group_by(Tier) %>%
+      mutate(PrevGap = coalesce(Start - lag(End), mergeMax+1),
+             GapGroup = cumsum(PrevGap > mergeMax)) %>%
+      ##Merge turns
+      group_by(Tier, GapGroup) %>%
+      summarise(across(Start, min), 
+                across(End, max),
+                across(Text, ~ paste(.x, collapse=" ")),
+                .groups="drop") %>%
+      ##Back in Start order
+      arrange(Start) %>% 
+      select(-GapGroup)
+  } else {
+    df <- df %>% 
+      select(Tier, Start, End, Text)
+  }
+  
   ##Optionally write
   if (write) {
-		df %>% 
-			##Only the columns needed for ELAN_Data
-			select(TIER_ID = Tier, START = Start, STOP = End, TEXT = Text) %>%
-			##Write
-			write.csv(file.path(outDir, str_replace(eafName, "eaf$", "csv")),
-								row.names=FALSE)
+    df %>% 
+      ##Only the columns needed for ELAN_Data
+      select(TIER_ID = Tier, START = Start, STOP = End, TEXT = Text) %>%
+      ##Write
+      write.csv(file.path(outDir, str_replace(eafName, "eaf$", "csv")),
+                row.names=FALSE)
   }
   
   ##Add call as attribute

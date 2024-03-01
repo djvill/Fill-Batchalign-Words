@@ -1,5 +1,5 @@
 ##Convert dataframe to XML document that conforms to ELAN file requirements
-df_to_elan <- function(df, mediaFile=NULL) {
+df_to_elan <- function(df, mediaFile=NULL, minElan="minimal-elan.xml") {
   ##Check arg
   if (!is.data.frame(df)) stop("df must be a data.frame")
   reqCols <- c("Tier", "Text", "Start", "End")
@@ -8,6 +8,8 @@ df_to_elan <- function(df, mediaFile=NULL) {
                                     paste(missingCols, collapse=" "))
   if ("File" %in% colnames(df) && length(unique(df$File)) > 1)
     stop("df must contain *one file's* worth of annotations")
+  if (!file.exists(minElan))
+    stop("Minimal Elan file ", minElan, " not found")
   
   ##Packages
   library(dplyr)
@@ -86,7 +88,7 @@ df_to_elan <- function(df, mediaFile=NULL) {
     lmap(as_xml_document)
   
   ##Get minimal xml
-  minXML <- readLines("minimal-elan.xml")
+  minXML <- readLines(minElan)
   if (startsWith(minXML[2], "<!--")) {
     minXML <- minXML[-2]
   }
