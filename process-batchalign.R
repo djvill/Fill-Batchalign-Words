@@ -305,7 +305,7 @@ fillWords <- function(segDF, wordDF,
     noMatchJoin <- join_by(File, overlaps(x$WordStart, x$WordEnd, y$Start, y$End))
   }
   
-  ##Add words that fall within AI-segmented boundaries (duplicating text for overlaps)
+  ##Add words that fall within segmented boundaries (duplicating text for overlaps)
   filledTurns <- 
     segDF %>% 
     left_join(wordDF %>% 
@@ -324,7 +324,7 @@ fillWords <- function(segDF, wordDF,
                   mutate(Tier = "Overlap"))
   }
   
-  ##Get words that don't fall into any AI-segmented turns
+  ##Get words that don't fall into any segmented turns
   noMatchWords <- 
     wordDF %>% 
     anti_join(segDF, noMatchJoin)

@@ -38,7 +38,7 @@ ui <- fluidPage(
       ##Functionality selection
       selectInput("task",
                   "Choose a task",
-                  list("Fill Batchalign transcription into AI segmentation" = "fill",
+                  list("Fill Batchalign transcription into segmented file" = "fill",
                        "Format Batchalign transcription" = "format"),
                   "fill"),
       
@@ -123,7 +123,7 @@ server <- function(input, output, session) {
       filePaths <- set_names(input$fileBA$datapath, input$fileBA$name)
       
       if (!all(endsWith(filePaths, ".eaf"))) {
-        stop("AI-segmented file must be an .eaf file")
+        stop("Batchalign file must be an .eaf file")
       }
       if (input$task=="fill") {
         filePaths %>% 
@@ -170,7 +170,7 @@ server <- function(input, output, session) {
   ##File upload (drag-n-drop) box(es)
   output$upload <- renderUI({
     uploadAISeg <- fileInput("fileAISeg",
-                             label="Drag and drop the AI-segmented file(s) into the box below",
+                             label="Drag and drop the segmented file(s) into the box below",
                              buttonLabel="Browse...",
                              placeholder="Your file here",
                              accept=".eaf",
@@ -214,7 +214,7 @@ server <- function(input, output, session) {
   inFiles <- reactive({
     if (input$task=="fill") {
       req(AISeg(), BA())
-      full_join(nest(AISeg(), `AI-Segmented`=-File),
+      full_join(nest(AISeg(), Segmented=-File),
                 nest(BA(), Batchalign=-File),
                 "File")
     } else {
@@ -240,7 +240,7 @@ server <- function(input, output, session) {
       fileMessage <- 
         fileTable %>% 
         mutate(across(-File, ~ str_remove_all(.x, " turns|\\(|\\)"))) %>% 
-        str_glue_data("{File} ({`AI-Segmented`}, {Batchalign})")
+        str_glue_data("{File} ({Segmented}, {Batchalign})")
       message(paste(c("File(s) uploaded (AI-segmented turns, Batchalign turns):",
                       fileMessage), 
                     collapse="\n  "))
@@ -275,6 +275,8 @@ server <- function(input, output, session) {
   
   ##Get output files
   outFiles <- reactive({
+    message("Generating output...")
+    
     ##Translate options to fillWords() args
     overlaps <- if_else(input$overlaps=="On both turns", "duplicate", "separate")
     containment <- if_else(input$overlaps=="Totally contained in turn", "total", "partial")
@@ -299,8 +301,8 @@ server <- function(input, output, session) {
     ##Inputs for fillWords()
     segDF <- 
       matchFiles %>% 
-      select(File, `AI-Segmented`) %>% 
-      unnest(`AI-Segmented`)
+      select(File, Segmented) %>% 
+      unnest(Segmented)
     wordDF <- 
       matchFiles %>% 
       select(File, Batchalign) %>% 
@@ -330,6 +332,8 @@ server <- function(input, output, session) {
            add_tier("Noise", "Noise") %>% 
            add_tier("Comment", "Comment") %>% 
            add_tier("Redaction", "Redaction"))
+    
+    message("Output generated")
     
     ##Return eaflist
     eaflist
