@@ -269,7 +269,7 @@ wordAlignments <- function(eaf, ...) {
 ##  into the former
 fillWords <- function(segDF, wordDF, 
                       overlaps=c("duplicate","separate"),
-                      containment=c("total","partial"),
+                      containment=c("boundsTotal","boundsPartial","midpoint"),
                       noMatch=c("turn","word","both","none")) {
   ##Check args
   stopifnot(is.data.frame(segDF))
@@ -296,13 +296,18 @@ fillWords <- function(segDF, wordDF,
     mutate(Overlap = n > 1,
            .keep="unused")
   
-  ##Get joins
-  if (containment=="total") {
+  ##Get joins (for filledJoin, x is segDF & y is wordDF; for noMatchJoin, it's the reverse)
+  if (containment=="boundsTotal") {
     filledJoin <- join_by(File, within(y$WordStart, y$WordEnd, x$Start, x$End))
     noMatchJoin <- join_by(File, within(x$WordStart, x$WordEnd, y$Start, y$End))
-  } else {
+  } else if (containment=="boundsPartial") {
     filledJoin <- join_by(File, overlaps(y$WordStart, y$WordEnd, x$Start, x$End))
     noMatchJoin <- join_by(File, overlaps(x$WordStart, x$WordEnd, y$Start, y$End))
+  } else if (containment=="midpoint") {
+    wordDF <- wordDF %>% 
+      mutate(WordMidpoint = (WordEnd - WordStart)/2 + WordStart)
+    filledJoin <- join_by(File, between(y$WordMidpoint, x$Start, x$End))
+    noMatchJoin <- join_by(File, between(x$WordMidpoint, y$Start, y$End))
   }
   
   ##Add words that fall within segmented boundaries (duplicating text for overlaps)
@@ -345,11 +350,7 @@ fillWords <- function(segDF, wordDF,
     allTurns <- allTurns %>% 
       bind_rows(noMatchWords %>% 
                   select(File, Text = Word, Start = WordStart, End = WordEnd) %>% 
-                  mutate(Tier = "NoMatch - Word")) %>%
-      ##Put word at top
-      mutate(across(Tier, ~ fct_relevel(.x, "NoMatch - Word"))) %>% 
-      arrange(File, Tier) %>% 
-      mutate(across(Tier, as.character))
+                  mutate(Tier = "NoMatch - Word"))
   }
   
   allTurns

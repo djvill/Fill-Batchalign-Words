@@ -1,5 +1,7 @@
 ## Fill-Batchalign-Words Shiny app
 
+message("****FILL-BATCHALIGN-WORDS****\n")
+
 library(shiny)
 library(dplyr)
 library(purrr)
@@ -21,8 +23,8 @@ source("elan-utils.R")
 ##Automatically use given files to expedite testing; set to NULL to force drag-n-drop
 testFileAISeg <- NULL
 testFileBA <- NULL
-# testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[c(2, 3)]
-# testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[c(2:4)]
+# testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[2]
+# testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[2]
 
 ##Debugging
 ##Show additional UI element(s) at top of main panel for debugging?
@@ -143,10 +145,10 @@ server <- function(input, output, session) {
         set_names(basename(.)) %>% 
         map_dfr(procBatch, .id="File")
     })
+  }
   
 	
   ##Debug wrapper
-  }
   output$debug <- renderUI({
     out <- verbatimTextOutput("debugContent")
     
@@ -201,7 +203,10 @@ server <- function(input, output, session) {
         radioButtons("overlaps", "Text for overlapping turns", 
                      c("On both turns", "On a separate tier")),
         radioButtons("containment", "How to determine when to fill a word",
-                     c("Totally contained in turn", "Partially contained in turn")),
+                     c("Word boundaries totally contained in turn", 
+                       "Word boundaries partially contained in turn",
+                       "Word midpoint contained in turn"),
+                     "Word midpoint contained in turn"),
         checkboxGroupInput("noMatch", "Separate tier(s) to create for words that don't match any turns",
                            c("Batchalign turn", "Batchalign word"), 
                            c("Batchalign turn", "Batchalign word"))
@@ -243,7 +248,8 @@ server <- function(input, output, session) {
         str_glue_data("{File} ({Segmented}, {Batchalign})")
       message(paste(c("File(s) uploaded (AI-segmented turns, Batchalign turns):",
                       fileMessage), 
-                    collapse="\n  "))
+                    collapse="\n  "),
+              "\n")
     } else {
       fileMessage <- 
         fileTable %>% 
@@ -279,7 +285,10 @@ server <- function(input, output, session) {
     
     ##Translate options to fillWords() args
     overlaps <- if_else(input$overlaps=="On both turns", "duplicate", "separate")
-    containment <- if_else(input$containment=="Totally contained in turn", "total", "partial")
+    containment <- case_match(input$containment,
+                              "Word boundaries totally contained in turn" ~ "boundsTotal",
+                              "Word boundaries partially contained in turn" ~ "boundsPartial",
+                              "Word midpoint contained in turn" ~ "midpoint")
     if ("Batchalign turn" %in% input$noMatch) {
       if ("Batchalign word" %in% input$noMatch) {
         noMatch <- "both"
