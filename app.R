@@ -8,6 +8,7 @@ library(xml2)
 
 ##Batchalign-processing function
 source("process-batchalign.R")
+##Prefill args for "fill" task
 procBatch <- partial(processBatchalign, 
                      noWor=FALSE, formatText=FALSE, mergeMax=Inf, 
                      eafUtils="github")
@@ -106,15 +107,15 @@ server <- function(input, output, session) {
         stop("AI-segmented file must be an .eaf file")
       }
       filePaths %>% 
-        imap_dfr(~ procBatch(.x) %>% 
-                   ##Override temp path (datapath) with actual name (name)
-                   mutate(File = .y))
+        ##Override temp path (datapath) with actual name (name)
+        map_dfr(procBatch, .id="File")
     })
   } else if (all(file.exists(testFileAISeg))) {
     ##If test file exists, use it
     AISeg <- eventReactive(TRUE, {
       testFileAISeg %>% 
-        map_dfr(procBatch)
+        set_names(basename(.)) %>% 
+        map_dfr(procBatch, .id="File")
     })
   }
   if (is.null(testFileBA) || !all(file.exists(testFileBA))) {
@@ -127,26 +128,25 @@ server <- function(input, output, session) {
       }
       if (input$task=="fill") {
         filePaths %>% 
-          imap_dfr(~ procBatch(.x) %>% 
-                     ##Override temp path (datapath) with actual name (name)
-                     mutate(File = .y))
+          ##Override temp path (datapath) with actual name (name)
+          map_dfr(procBatch, .id="File")
       } else {
         filePaths %>% 
-          imap_dfr(~ processBatchalign(.x) %>% 
-                     ##Override temp path (datapath) with actual name (name)
-                     mutate(File = .y))
+          ##Override temp path (datapath) with actual name (name)
+          map_dfr(processBatchalign, .id="File")
       }
     })
   } else if (all(file.exists(testFileBA))) {
     ##If test file exists, use it
     BA <- eventReactive(TRUE, {
       testFileBA %>% 
-        map_dfr(procBatch)
+        set_names(basename(.)) %>% 
+        map_dfr(procBatch, .id="File")
     })
-  }
   
 	
   ##Debug wrapper
+  }
   output$debug <- renderUI({
     out <- verbatimTextOutput("debugContent")
     
@@ -275,11 +275,11 @@ server <- function(input, output, session) {
   
   ##Get output files
   outFiles <- reactive({
-    message("Generating output...")
+    message("Generating output...\n")
     
     ##Translate options to fillWords() args
     overlaps <- if_else(input$overlaps=="On both turns", "duplicate", "separate")
-    containment <- if_else(input$overlaps=="Totally contained in turn", "total", "partial")
+    containment <- if_else(input$containment=="Totally contained in turn", "total", "partial")
     if ("Batchalign turn" %in% input$noMatch) {
       if ("Batchalign word" %in% input$noMatch) {
         noMatch <- "both"
@@ -299,6 +299,7 @@ server <- function(input, output, session) {
       filter(!if_any(everything(), is.null))
     
     ##Inputs for fillWords()
+    message("Extracting word alignments...\n")
     segDF <- 
       matchFiles %>% 
       select(File, Segmented) %>% 
@@ -313,11 +314,20 @@ server <- function(input, output, session) {
       splitWords() ##From process-batchalign.R
     
     ##Fill words
+    message("Filling words with fillWords(overlaps='", overlaps, 
+            "', containment='", containment, "', noMatch='", noMatch, "')...\n")
     filled <- 
       fillWords(segDF, wordDF, 
                 overlaps=overlaps, containment=containment, noMatch=noMatch) %>% 
       mutate(across(Text, betterText)) %>% ##betterText(): from process-batchalign.R
       select(-Overlap)
+    
+    message("Turns per file & tier:")
+    filled %>% 
+      count(File, Tier) %>% 
+      mutate(msg = paste0(File, " & ", Tier, ": ", n, "\n")) %>% 
+      pull(msg) %>% 
+      message()
     
     ##Convert output to Elan using built-in methods
     eaflist <- 
