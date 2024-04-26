@@ -31,7 +31,7 @@ processBatchalign <- function(eaf, write=FALSE, outDir=".",
   
   ##Source eaf-utils.R (for xmllist_to_df())
   localUtils <- "~/Elan-File-Checkers/eaf-utils.R"
-  githubUtils <- "https://github.com/djvill/elan-file-checkers/raw/main/eaf-utils.R"
+  githubUtils <- "https://github.com/djvill/elan-file-checkers/raw/37626fe/eaf-utils.R"
   if (eafUtils=="local" && file.exists(localUtils)) {
     source(localUtils)
   } else {
