@@ -61,9 +61,7 @@ ui <- fluidPage(
 )
 
 
-# Server ------------------------------------------------------------------
-
-##Convenience functions to display/undisplay HTML elements
+# Convenience functions to display/undisplay HTML elements --------------------
 display <- function(x) {
   if (!("shiny.tag" %in% class(x))) {
     stop("display() only works with shiny.tag objects, not ", 
@@ -97,9 +95,9 @@ undisplay <- function(x) {
   x
 }
 
-
+# Server ----------------------------------------------------------------------
 server <- function(input, output, session) {
-  ##Read files
+  ## Read files ==============================================================
   if (is.null(testFileAISeg) || !all(file.exists(testFileAISeg))) {
     ##If no test file specified, file must be uploaded via drag-n-drop
     AISeg <- eventReactive(input$fileAISeg, {
@@ -147,7 +145,7 @@ server <- function(input, output, session) {
     })
   }
   
-	
+	## Debugging ================================================================
   ##Debug wrapper
   output$debug <- renderUI({
     out <- verbatimTextOutput("debugContent")
@@ -169,7 +167,7 @@ server <- function(input, output, session) {
 		)
   })
   
-  ##File upload (drag-n-drop) box(es)
+  ## File upload (drag-n-drop) box(es) =====================================
   output$upload <- renderUI({
     uploadAISeg <- fileInput("fileAISeg",
                              label="Drag and drop the segmented file(s) into the box below",
@@ -190,8 +188,7 @@ server <- function(input, output, session) {
     }
   })
   
-  ##Config options
-  ##Column selection
+  ## Config options ==========================================================
   output$options <- renderUI({
     ##Only show once both files have been uploaded
     req(AISeg(), BA())
@@ -214,7 +211,7 @@ server <- function(input, output, session) {
     }
   })
   
-  
+  ## Initial file processing =================================================
   ##Match input files
   inFiles <- reactive({
     if (input$task=="fill") {
@@ -228,7 +225,7 @@ server <- function(input, output, session) {
     }
   })
   
-  ##File info
+  ## File info table =========================================================
   output$fileInfo <- renderTable({
     req(inFiles())
     fileTable <-
@@ -240,7 +237,8 @@ server <- function(input, output, session) {
                                filter(!startsWith(Tier, "wor@")) %>%
                                nrow() %>%
                                paste("turns"),
-                             "(No file uploaded)")))
+                             "(No file uploaded)"))) %>% 
+      arrange(File)
     if (input$task=="fill") {
       fileMessage <- 
         fileTable %>% 
@@ -279,7 +277,7 @@ server <- function(input, output, session) {
     }
   })
   
-  ##Get output files
+  ## Main execution: Get output files =========================================
   outFiles <- reactive({
     message("Generating output...\n")
     
@@ -366,7 +364,7 @@ server <- function(input, output, session) {
       imap(~ df_to_elan(.x, mediaFile=gsub("eaf$", "wav", .y)))
   })
 	
-  ##Main panel
+  ## Main panel UI ============================================================
 	output$output <- renderUI({
 	  if (input$task=="fill") {
 	    req(outFiles())
@@ -385,7 +383,7 @@ server <- function(input, output, session) {
 	  }
 	})
 	
-	##Download handler
+	## Download handler =========================================================
 	output$OutputFile <- downloadHandler(
 	  filename=function() {
 	    if (input$task=="fill") { 
