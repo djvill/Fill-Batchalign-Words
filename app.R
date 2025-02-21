@@ -205,7 +205,6 @@ server <- function(input, output, session) {
                        "Word midpoint contained in turn"),
                      "Word midpoint contained in turn"),
         checkboxGroupInput("noMatch", "Separate tier(s) to create for words that don't match any turns",
-                           c("Batchalign turn", "Batchalign word"), 
                            c("Batchalign turn", "Batchalign word"))
       )
     }
