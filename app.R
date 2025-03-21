@@ -26,6 +26,9 @@ testFileBA <- NULL
 # testFileAISeg <- dir("Test-Files/AI-Segmented/", full.names=T)[2]
 # testFileBA <- dir("Test-Files/Batchalign/", full.names=T)[2]
 
+##Strip non-alphanumeric suffixes?
+stripSuffix <- TRUE
+
 ##Debugging
 ##Show additional UI element(s) at top of main panel for debugging?
 showDebug <- FALSE
@@ -101,10 +104,14 @@ server <- function(input, output, session) {
   if (is.null(testFileAISeg) || !all(file.exists(testFileAISeg))) {
     ##If no test file specified, file must be uploaded via drag-n-drop
     AISeg <- eventReactive(input$fileAISeg, {
-      filePaths <- set_names(input$fileAISeg$datapath, input$fileAISeg$name)
-      
+      filePaths <- input$fileAISeg$datapath
       if (!all(endsWith(filePaths, ".eaf"))) {
         stop("AI-segmented file must be an .eaf file")
+      }
+      if (stripSuffix) {
+        names(filePaths) <- gsub("(^[A-Za-z0-9]+).*\\.eaf$", "\\1.eaf", input$fileAISeg$name)
+      } else {
+        names(filePaths) <- input$fileAISeg$name
       }
       filePaths %>% 
         ##Override temp path (datapath) with actual name (name)
@@ -121,10 +128,14 @@ server <- function(input, output, session) {
   if (is.null(testFileBA) || !all(file.exists(testFileBA))) {
     ##If no test file specified, file must be uploaded via drag-n-drop
     BA <- eventReactive(input$fileBA, {
-      filePaths <- set_names(input$fileBA$datapath, input$fileBA$name)
-      
+      filePaths <- input$fileBA$datapath
       if (!all(endsWith(filePaths, ".eaf"))) {
         stop("Batchalign file must be an .eaf file")
+      }
+      if (stripSuffix) {
+        names(filePaths) <- gsub("(^[A-Za-z0-9]+).*\\.eaf$", "\\1.eaf", input$fileBA$name)
+      } else {
+        names(filePaths) <- input$fileBA$name
       }
       if (input$task=="fill") {
         filePaths %>% 
